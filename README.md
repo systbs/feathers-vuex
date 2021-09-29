@@ -77,4 +77,14 @@ export default store(function (/* { ssrContext } */) {
 export function useStore() {
   return vuexUseStore(storeKey)
 }
+
+
+// use it
+
+const {Comment} = feathersVuex.models.api;
+const comments = await Comment.find({
+  query:{
+    $sort: { createdAt:-1}
+  }
+});
 ```
