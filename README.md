@@ -1,6 +1,6 @@
 # feathers-vuex
 feathers-vuex
-```
+```ts
 // feathers-client.ts
 import feathers from '@feathersjs/feathers';
 import FeathersVuex, { Model } from './plugin';
