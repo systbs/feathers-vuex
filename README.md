@@ -15,7 +15,6 @@ export { app as feathersClient, feathersVuex, Model };
 
 
 //store.ts
-import { CancelablePromise } from 'cancelable-promise';
 import { store } from 'quasar/wrappers';
 import { InjectionKey } from 'vue';
 import {
