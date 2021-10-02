@@ -44,9 +44,9 @@ const servicePlugin = feathersVuex.createServicePlugin({
 
 declare module 'vuex' {
   export interface Dispatch {
-    <TResult = any>(type: string, payload?: any, options?: DispatchOptions): CancelablePromise<TResult>;
-    <P extends Payload>(payloadWithType: P, options?: DispatchOptions): CancelablePromise<any>;
-    <P extends Payload, R>(payloadWithType: P, options?: DispatchOptions): CancelablePromise<R>;
+    <TResult = any>(type: string, payload?: any, options?: DispatchOptions): Promise<TResult>;
+    <P extends Payload>(payloadWithType: P, options?: DispatchOptions): Promise<any>;
+    <P extends Payload, R>(payloadWithType: P, options?: DispatchOptions): Promise<R>;
   }
 }
 
