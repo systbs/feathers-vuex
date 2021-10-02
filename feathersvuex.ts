@@ -1,7 +1,7 @@
 import { ActionTree, GetterTree, Module, MutationTree, Store } from 'vuex';
 import { filterQuery, sorter, select } from '@feathersjs/adapter-commons';
-import { unref } from 'vue';
-import { omit, get, pick, merge, cloneDeep, set } from 'lodash';
+import { unref, reactive } from 'vue';
+import { omit, get, pick, merge } from 'lodash';
 import { Service, Application } from '@feathersjs/feathers';
 import sift from 'sift';
 import { StateInterface } from './types';
@@ -10,6 +10,9 @@ import { getServicePath, ns, assignIfNotPresent } from './utils';
 
 const FILTERS = ['$sort', '$limit', '$skip', '$select']
 const additionalOperators = ['$elemMatch']
+const blacklist = [
+	'options',
+];
 
 export interface ServicePluginOptions {
 	model: any;
@@ -30,6 +33,7 @@ export interface ServicePluginOptions {
 	actions?: any;
 
 	debounceEventsMaxWait?: number;
+	enableEvents?: boolean;
 }
 
 export interface FeathersVuexOptions {
@@ -71,9 +75,12 @@ export default class FeathersVuex {
 		debounceEventsMaxWait: 1000
 	};
 
+	app: Application;
+
 	constructor(app: Application<any>, config: FeathersVuexOptions) {
 		this.options = Object.assign(this.#defaults, config);
 		this.models = {};
+		this.app = app;
 	}
 
 	private insert(model: any) {
@@ -163,11 +170,7 @@ export default class FeathersVuex {
 				const { keyedById, idField } = state;
 				return (payload: any) => {
 					const { id, params } = payload;
-					const record = keyedById[id] && select(params, idField)(keyedById[id]);
-					if (record) {
-						return record
-					}
-					return null;
+					return keyedById[id] && select(params, idField)(keyedById[id]);
 				}
 			},
 			count(state, getters) {
@@ -175,7 +178,7 @@ export default class FeathersVuex {
 					const params = unref(payload) || {};
 
 					const cleanQuery = omit(params.query, FILTERS)
-					params.query = cleanQuery
+					params.query = cleanQuery;
 
 					return getters.find(params).total;
 				}
@@ -192,20 +195,16 @@ export default class FeathersVuex {
 						if (id in keyedById) {
 							for (const key in item) {
 								if (item[key] !== keyedById[id][key]) {
-									keyedById[id][key] = Reflect.get(item, key);
+									Reflect.set(keyedById[id], key, item[key]);
 								}
 							}
 						} else {
 							const { serverAlias, modelName } = state
 							const model = get(this.models, [serverAlias, modelName]);
 
-							item = merge({}, item, model);
+							item = reactive(merge({}, omit(item, blacklist)));
 
-							if (Model && !(item instanceof Model)) {
-								keyedById[id] = new Model(item);
-							} else {
-								keyedById[id] = item;
-							}
+							keyedById[id] = new model(item);
 						}
 					}
 				}
@@ -222,61 +221,37 @@ export default class FeathersVuex {
 						}
 					}
 				}
-			},
-			patch(state, payload) {
-				const { keyedById, idField } = state;
-				const items = Array.isArray(payload) ? payload : [payload];
-				for (const item of items) {
-					const id = item[idField];
-					if (id !== null && id !== undefined) {
-						if (id in keyedById) {
-							for (const key in item) {
-								if (item[key] !== keyedById[id][key]) {
-									keyedById[id][key] = Reflect.get(item, key);
-								}
-							}
-						} else {
-							let reflected: Record<string, any> = {};
-							for (const key in item) {
-								reflected[key] = Reflect.get(item, key);
-							}
-							if (Model && !(reflected instanceof Model)) {
-								reflected = new Model(reflected)
-							}
-							keyedById[id] = reflected;
-						}
-					}
-				}
 			}
 		};
 
 		const actions: ActionTree<S, R> = {
-			async create({ commit }, payload) {
+			async create({ commit, getters, state }, payload) {
 				const { data, params } = payload;
 				const response = await service.create(data, params);
 				commit('update', response);
-				return response;
+				const { idField } = state;
+				return getters.get(response[idField]);
 			},
 
-			async update({ commit }, payload) {
+			async update({ commit, getters }, payload) {
 				const { id, data, params } = payload;
 				const response = await service.update(id, data, params);
 				commit('update', response);
-				return response;
+				return getters.get(payload);
 			},
 
-			async find({ commit }, payload) {
+			async find({ commit, getters }, payload) {
 				const response = await service.find(payload);
 				if (Array.isArray(response)) {
-					for (const favorite of response) {
-						commit('update', favorite);
+					for (const item of response) {
+						commit('update', item);
 					}
 				} else {
-					for (const favorite of response.data) {
-						commit('update', favorite);
+					for (const item of response.data) {
+						commit('update', item);
 					}
 				}
-				return response;
+				return getters.find(payload);
 			},
 
 			async get({ commit, getters }, payload) {
@@ -301,11 +276,11 @@ export default class FeathersVuex {
 				return response;
 			},
 
-			async patch({ commit }, payload) {
+			async patch({ commit, getters }, payload) {
 				const { id, data, params } = payload;
 				const response = await service.patch(id, data, params);
 				commit('update', response);
-				return response;
+				return getters.get(payload);
 			},
 		}
 
@@ -347,6 +322,26 @@ export default class FeathersVuex {
 		return merge({}, merged, { store, module: merged });
 	}
 
+	enableServiceEvents(
+		service: Service<any>,
+		store: Store<any>,
+		options: FeathersVuexOptionsInstance & ServicePluginOptions
+	) {
+		const { namespace } = options;
+		service.on('created', (item: any) => {
+			store.commit(`${namespace}/update`, item);
+		})
+		service.on('updated', item => {
+			store.commit(`${namespace}/update`, item);
+		})
+		service.on('patched', item => {
+			store.commit(`${namespace}/update`, item);
+		})
+		service.on('removed', item => {
+			store.commit(`${namespace}/remove`, item);
+		})
+	}
+
 	createServicePlugin(config: ServicePluginOptions) {
 		const options = Object.assign({}, this.#defaults, this.options, config);
 		const {
@@ -358,6 +353,7 @@ export default class FeathersVuex {
 		if (!servicePath) {
 			servicePath = getServicePath(service, model);
 		}
+
 		options.servicePath = servicePath;
 		options.modelName = model.modelName;
 
@@ -385,6 +381,10 @@ export default class FeathersVuex {
 			}
 
 			this.insert(model);
+
+			if (options.enableEvents) {
+				this.enableServiceEvents(service, store, options);
+			}
 		}
 	}
 
