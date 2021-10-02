@@ -15,7 +15,6 @@ export { app as feathersClient, feathersVuex, Model };
 
 
 //store.ts
-import { store } from 'vuex';
 import { InjectionKey } from 'vue';
 import {
   createStore,
