@@ -82,7 +82,11 @@ export function useStore() {
 const {Comment} = feathersVuex.models.api;
 const comments = await Comment.find({
   query:{
-    $sort: { createdAt:-1}
+    $sort: { createdAt:-1},
+    $limit:-1,
   }
 });
+
+Reflect.set(comments[0], 'value', 'new value');
+comments[0].patch();
 ```
