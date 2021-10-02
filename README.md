@@ -3,7 +3,7 @@ feathers-vuex
 ```ts
 // feathers-client.ts
 import feathers from '@feathersjs/feathers';
-import FeathersVuex, { Model } from './plugin';
+import FeathersVuex, { Model } from './index';
 const app = feathers();
 const feathersVuex = new FeathersVuex(app, {
 	serverAlias: 'api',
