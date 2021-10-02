@@ -79,7 +79,7 @@ export function useStore() {
 }
 
 
-// use it
+// how to use 
 
 const {Comment} = feathersVuex.models.api;
 const comments = await Comment.find({
