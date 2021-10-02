@@ -80,13 +80,8 @@ export function useStore() {
 // how to use 
 
 const {Comment} = feathersVuex.models.api;
-const comments = await Comment.find({
-  query:{
-    $sort: { createdAt:-1},
-    $limit:-1,
-  }
-});
-
-Reflect.set(comments[0], 'value', 'new value');
-comments[0].patch();
+const comment = await Comment.get('614e3dff8a5a6d0654c52f3e');
+const cloned = comment.clone();
+cloned.value = 'new value';
+cloned.patch();
 ```
