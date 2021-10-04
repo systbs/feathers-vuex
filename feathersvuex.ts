@@ -5,10 +5,9 @@ import { omit, get, pick, merge } from 'lodash';
 import { Service, Application } from '@feathersjs/feathers';
 import sift from 'sift';
 import { StateInterface } from './types';
-import { Model } from './model';
 import { getServicePath, ns, assignIfNotPresent } from './utils';
 
-const FILTERS = ['$sort', '$limit', '$skip', '$select']
+const FILTERS = ['$sort', '$limit', '$skip', '$select', '$regex', '$options']
 const additionalOperators = ['$elemMatch']
 const blacklist = [
 	'options',
@@ -126,7 +125,7 @@ export default class FeathersVuex {
 				const {
 					paramsForServer,
 					whitelist,
-					keyedById,
+					ids,
 				} = state
 
 				return (payload: any) => {
@@ -137,8 +136,7 @@ export default class FeathersVuex {
 						operators: additionalOperators.concat(whitelist)
 					});
 
-					let values = Object.values<any>(keyedById);
-
+					let values = Object.values<any>(ids);
 
 					values = values.filter(sift(query))
 
@@ -146,6 +144,14 @@ export default class FeathersVuex {
 
 					if (filters.$sort !== undefined) {
 						values.sort(sorter(filters.$sort));
+					}
+
+					const Qlimit = get(q, '$limit');
+					if (Qlimit && Qlimit < 0) {
+						if (filters.$select) {
+							values = select(params)(values)
+						}
+						return values;
 					}
 
 					if (filters.$skip !== undefined && filters.$limit !== undefined) {
@@ -167,10 +173,10 @@ export default class FeathersVuex {
 				}
 			},
 			get(state) {
-				const { keyedById, idField } = state;
+				const { ids, idField } = state;
 				return (payload: any) => {
 					const { id, params } = payload;
-					return keyedById[id] && select(params, idField)(keyedById[id]);
+					return ids[id] && select(params, idField)(ids[id]);
 				}
 			},
 			count(state, getters) {
@@ -187,15 +193,15 @@ export default class FeathersVuex {
 
 		const mutations: MutationTree<S> = {
 			update: (state, payload) => {
-				const { keyedById, idField } = state;
+				const { ids, idField } = state;
 				const items = Array.isArray(payload) ? payload : [payload];
 				for (let item of items) {
 					const id = item[idField];
 					if (id !== null && id !== undefined) {
-						if (id in keyedById) {
+						if (id in ids) {
 							for (const key in item) {
-								if (item[key] !== keyedById[id][key]) {
-									Reflect.set(keyedById[id], key, item[key]);
+								if (item[key] !== ids[id][key]) {
+									Reflect.set(ids[id], key, item[key]);
 								}
 							}
 						} else {
@@ -204,26 +210,26 @@ export default class FeathersVuex {
 
 							item = reactive(merge({}, omit(item, blacklist)));
 
-							keyedById[id] = new model(item);
+							ids[id] = new model(item);
 						}
 					}
 				}
 			},
 			remove(state, payload) {
-				const { keyedById, idField } = state;
+				const { ids, idField } = state;
 				const items = Array.isArray(payload) ? payload : [payload];
 				for (const item of items) {
 					const id = item[idField];
 					if (id !== null && id !== undefined) {
-						if (id in keyedById) {
-							unref(keyedById[id]);
-							delete keyedById[id];
+						if (id in ids) {
+							unref(ids[id]);
+							delete ids[id];
 						}
 					}
 				}
 			},
 			upgrade: (state, payload) => {
-				const { keyedById, idField } = state;
+				const { ids, idField } = state;
 				const items = Array.isArray(payload) ? payload : [payload];
 				for (let item of items) {
 					const id = item[idField];
@@ -233,18 +239,19 @@ export default class FeathersVuex {
 
 						item = reactive(merge({}, omit(item, blacklist)));
 
-						keyedById[id] = new model(item);
+						ids[id] = new model(item);
 					}
 				}
 			}
 		};
 
 		const actions: ActionTree<S, R> = {
-			async create({ commit, getters }, payload) {
+			async create({ commit, getters, state }, payload) {
 				const { data, params } = payload;
 				const response = await service.create(data, params);
 				commit('update', response);
-				return getters.get(response);
+				const { idField } = state;
+				return getters.get({ id: response[idField] });
 			},
 
 			async update({ commit, getters }, payload) {
@@ -260,12 +267,14 @@ export default class FeathersVuex {
 					for (const item of response) {
 						commit('update', item);
 					}
+					return getters.find(payload);
 				} else {
+					const pagination = omit(response, 'data');
 					for (const item of response.data) {
 						commit('update', item);
 					}
+					return merge(getters.find(payload), pagination);
 				}
-				return getters.find(payload);
 			},
 
 			async get({ commit, getters }, payload) {
@@ -307,16 +316,14 @@ export default class FeathersVuex {
 			'modelName',
 			'idField',
 			'servicePath',
-			'serverAlias'
+			'serverAlias',
+			'whitelist',
+			'paramsForServer'
 		]);
 
 		const state: any = merge({
-			keyedById: {},
+			ids: {},
 			namespace: '',
-			pagination: {
-				defaultLimit: 0,
-				defaultSkip: 0,
-			},
 			whitelist: [],
 			paramsForServer: [],
 			modelName: '',
