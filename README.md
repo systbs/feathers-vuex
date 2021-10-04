@@ -94,13 +94,13 @@ const { Post, Comment, View } = feathersVuex.models.api;
 
 async function findCommentHook(record:any, context:any){
 const response = await useQuery({
-	model: Comment,
-	method: 'find',
-	params: {
-	  query: {
-	    owner: record.id
-	  }
-	}
+  model: Comment,
+  method: 'find',
+  params: {
+    query: {
+      owner: record.id
+    }
+  }
 });
 const clone = record.clone();
 clone.comments = Reflect.get(response, 'items');
@@ -109,13 +109,13 @@ clone.commit();
 
 async function findViewHook(record:any, context:any){
 const response = await useQuery({
-	model: View,
-	method: 'find',
-	params: {
-	  query: {
-	    owner: record.id
-	  }
-	}
+  model: View,
+  method: 'find',
+  params: {
+   query: {
+    owner: record.id
+   }
+  }
 });
 const clone = record.clone();
 clone.views = Reflect.get(response, 'items');
@@ -124,13 +124,13 @@ clone.commit();
 
 
 const result = await useQuery({
-	model:Post,
-	method: 'find',
-	params: computed(() => ({
-	  query:{
-		uid:'sample-identifier'
-	  }
-	})
+  model:Post,
+  method: 'find',
+  params: computed(() => ({
+    query:{
+      uid:'sample-identifier'
+    }
+  })
 ),
 hooks: [
   findCommentHook, findViewHook
