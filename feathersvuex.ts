@@ -216,21 +216,35 @@ export default class FeathersVuex {
 					const id = item[idField];
 					if (id !== null && id !== undefined) {
 						if (id in keyedById) {
-							unref(item[id]);
-							delete item[id];
+							unref(keyedById[id]);
+							delete keyedById[id];
 						}
+					}
+				}
+			},
+			upgrade: (state, payload) => {
+				const { keyedById, idField } = state;
+				const items = Array.isArray(payload) ? payload : [payload];
+				for (let item of items) {
+					const id = item[idField];
+					if (id !== null && id !== undefined) {
+						const { serverAlias, modelName } = state
+						const model = get(this.models, [serverAlias, modelName]);
+
+						item = reactive(merge({}, omit(item, blacklist)));
+
+						keyedById[id] = new model(item);
 					}
 				}
 			}
 		};
 
 		const actions: ActionTree<S, R> = {
-			async create({ commit, getters, state }, payload) {
+			async create({ commit, getters }, payload) {
 				const { data, params } = payload;
 				const response = await service.create(data, params);
 				commit('update', response);
-				const { idField } = state;
-				return getters.get(response[idField]);
+				return getters.get(response);
 			},
 
 			async update({ commit, getters }, payload) {
@@ -267,13 +281,13 @@ export default class FeathersVuex {
 				return getters.get(payload);
 			},
 
-			async remove({ commit }, payload) {
+			async remove({ commit, getters }, payload) {
 				const { id, params } = payload;
 				const response = await service.remove(id, params);
 				if (response) {
 					commit('remove', response);
 				}
-				return response;
+				return getters.get(response);
 			},
 
 			async patch({ commit, getters }, payload) {
