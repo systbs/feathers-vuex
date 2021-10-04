@@ -1,11 +1,7 @@
 import { Id, Params } from '@feathersjs/feathers';
-import { cloneDeep, merge, omit } from 'lodash';
+import { cloneDeep, keys, omit, pick } from 'lodash';
 import { Store } from 'vuex';
 import { StateInterface } from './types';
-
-const blacklist = [
-	'options'
-];
 
 export class Model {
 	[key: string]: any;
@@ -17,6 +13,10 @@ export class Model {
 	public static modelName = 'Model';
 	public static readonly store: Store<StateInterface>;
 	public static readonly models: Record<any, any>;
+	public static paramsForServer: string[] = [];
+	public static instance: Record<any, any> = {};
+	public static blacklist: string[] = [];
+	public static params: Params;
 
 	constructor(data: Record<any, any>, options?: any) {
 		for (const key in data) {
@@ -24,38 +24,32 @@ export class Model {
 		}
 	}
 
-	public static getInstance() {
-		return this;
-	}
-
 	public static find(params?: Params) {
 		const { namespace, store } = this;
-		if (namespace && store)
-			return store.dispatch(`${namespace}/find`, params);
+		return store.dispatch(`${namespace}/find`, params);
 	}
 
 	public static get(id: Id, params?: Params) {
 		const { namespace, store } = this;
-		if (namespace && store)
-			return store.dispatch(`${namespace}/get`, { id, params });
+		return store.dispatch(`${namespace}/get`, { id, params });
 	}
 
 	public static count(params?: Params) {
 		const { namespace, store } = this;
-		if (namespace && store)
-			return store.dispatch(`${namespace}/count`, params);
+		return store.dispatch(`${namespace}/count`, params);
 	}
 
-	commit() {
-		const { namespace, store, idField } = this.constructor as typeof Model;
+	commit(params?: Params) {
+		const { namespace, store, idField, blacklist } = this.constructor as typeof Model;
 		const data = omit(this, blacklist);
 		store.commit(`${namespace}/update`, data);
-		return store.getters(`${namespace}/get`, this[idField]);
+		return store.getters[`${namespace}/get`]({ id: this[idField], params });
 	}
 
 	create(params?: Params) {
-		const { namespace, store } = this.constructor as typeof Model;
-		const data = omit(this, blacklist);
+		const { namespace, store, instance, blacklist } = this.constructor as typeof Model;
+		const data = instance ?
+			pick(omit(this, blacklist), keys(instance)) : omit(this, blacklist);
 		return store.dispatch(`${namespace}/create`, { data, params });
 	}
 
@@ -70,7 +64,7 @@ export class Model {
 	}
 
 	patch(params?: Params) {
-		const { namespace, store, idField } = this.constructor as typeof Model;
+		const { namespace, store, idField, blacklist, instance } = this.constructor as typeof Model;
 		const id = this[idField];
 		if (id !== 0 && !id) {
 			const error = new Error(
@@ -78,12 +72,13 @@ export class Model {
 			)
 			return Promise.reject(error)
 		}
-		const data = omit(this, blacklist);
+		const data = instance ?
+			pick(omit(this, blacklist), keys(instance)) : omit(this, blacklist);
 		return store.dispatch(`${namespace}/patch`, { id, data, params });
 	}
 
 	update(params?: Params) {
-		const { namespace, store, idField } = this.constructor as typeof Model;
+		const { namespace, store, idField, blacklist, instance } = this.constructor as typeof Model;
 		const id = this[idField];
 		if (id !== 0 && !id) {
 			const error = new Error(
@@ -91,14 +86,14 @@ export class Model {
 			)
 			return Promise.reject(error)
 		}
-		const data = omit(this, blacklist);
+		const data = instance ?
+			pick(omit(this, blacklist), keys(instance)) : omit(this, blacklist);
 		return store.dispatch(`${namespace}/update`, { id, data, params });
 	}
 
 	clone() {
 		const { idField } = this.constructor as typeof Model;
 		const id = this[idField];
-		console.log({ Model: Model.getInstance(), data: this });
 		if (id !== 0 && !id) {
 			const error = new Error(
 				`Missing ${idField} property. You must create the data before you can update with this data`
@@ -109,6 +104,7 @@ export class Model {
 	}
 
 	toJSON() {
+		const { blacklist } = this.constructor as typeof Model;
 		return omit(this, blacklist);
 	}
 }
